@@ -54,7 +54,7 @@ test_generator = val_test_datagen.flow_from_directory(
 )
 
 # ============================================================
-# 3. ARCHITEKTURA CNN
+# 3. ARCHITEKTURA CNN.
 # ============================================================
 model = Sequential([
     # Blok 1

@@ -93,7 +93,7 @@ model = Sequential([
 model.summary()
 
 # ============================================================
-# 4. KONFIGURACJA OPTYMALIZACJI
+# 4. KONFIGURACJA OPTYMALIZACJI.
 # ============================================================
 optimizer = Adam(learning_rate=0.001)
 

@@ -124,43 +124,43 @@ def detect_and_crop_face(img_array):
 def make_emotion_chart(probs):
     """Tworzy piękny wykres słupkowy z prawdopodobieństwami emocji."""
     fig, ax = plt.subplots(figsize=(8, 4))
-    fig.patch.set_facecolor('#1a1a2e')
-    ax.set_facecolor('#16213e')
+    fig.patch.set_facecolor('#0a0a14')
+    ax.set_facecolor('#0a0a14')
 
     labels_pl = [EMOTION_PL[e] for e in EMOTION_LABELS]
     colors = [EMOTION_COLORS[e] for e in EMOTION_LABELS]
     values = [p * 100 for p in probs]
 
-    bars = ax.barh(labels_pl, values, color=colors, edgecolor='none',
-                   height=0.6)
+    bars = ax.barh(labels_pl, values, color=colors, edgecolor='none', height=0.55)
 
     # Highlight najwyższy słupek
     max_idx = np.argmax(values)
-    bars[max_idx].set_edgecolor('white')
-    bars[max_idx].set_linewidth(2)
+    bars[max_idx].set_edgecolor('#ffffff')
+    bars[max_idx].set_linewidth(1.5)
 
     # Etykiety wartości
     for bar, val in zip(bars, values):
-        ax.text(min(val + 1, 97), bar.get_y() + bar.get_height() / 2,
+        ax.text(min(val + 1.2, 97), bar.get_y() + bar.get_height() / 2,
                 f'{val:.1f}%', va='center', ha='left',
-                color='white', fontsize=9, fontweight='bold')
+                color='#e0e0e0', fontsize=8.5, fontweight='600',
+                fontfamily='monospace')
 
-    ax.set_xlim(0, 105)
-    ax.set_xlabel('Prawdopodobieństwo (%)', color='#aaaaaa', fontsize=10)
-    ax.set_title('Rozkład prawdopodobieństw emocji', color='white',
-                 fontsize=12, fontweight='bold', pad=12)
-    ax.tick_params(colors='#cccccc', labelsize=10)
+    ax.set_xlim(0, 108)
+    ax.set_xlabel('Prawdopodobieństwo (%)', color='#555577', fontsize=9, labelpad=8)
+    ax.set_title('Rozkład prawdopodobieństw', color='#9090bb',
+                 fontsize=10, fontweight='600', pad=10, loc='left')
+    ax.tick_params(colors='#6666aa', labelsize=9.5)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_color('#333355')
-    ax.spines['left'].set_color('#333355')
-    ax.xaxis.grid(True, color='#2a2a4a', linestyle='--', alpha=0.7)
+    ax.spines['bottom'].set_color('#1e1e3a')
+    ax.spines['left'].set_color('#1e1e3a')
+    ax.xaxis.grid(True, color='#141428', linestyle='-', linewidth=1, alpha=1)
     ax.set_axisbelow(True)
 
-    plt.tight_layout()
+    plt.tight_layout(pad=1.2)
 
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=130, bbox_inches='tight',
+    plt.savefig(buf, format='png', dpi=140, bbox_inches='tight',
                 facecolor=fig.get_facecolor())
     buf.seek(0)
     chart_img = Image.open(buf).copy()
@@ -173,7 +173,15 @@ def annotate_image(img_array, face_bbox):
     annotated = img_array.copy()
     if face_bbox is not None:
         x, y, w, h = face_bbox
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), (39, 174, 96), 3)
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), (99, 102, 241), 3)
+        # Narożniki akcentowe
+        corner_len = max(8, min(w, h) // 6)
+        thickness = 2
+        for cx, cy in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]:
+            dx = 1 if cx == x else -1
+            dy = 1 if cy == y else -1
+            cv2.line(annotated, (cx, cy), (cx + dx * corner_len, cy), (167, 139, 250), thickness + 1)
+            cv2.line(annotated, (cx, cy), (cx, cy + dy * corner_len), (167, 139, 250), thickness + 1)
     return Image.fromarray(annotated)
 
 
@@ -181,16 +189,17 @@ def predict_emotion(image):
     """Główna funkcja predykcji emocji."""
     if image is None:
         return (
-            "<div style='color:#e74c3c;padding:20px;text-align:center;font-size:16px;'>"
-            "⚠️ Brak obrazu. Wgraj zdjęcie lub użyj kamery.</div>",
+            "<div style='color:#6366f1;padding:40px;text-align:center;font-size:15px;"
+            "font-family:\"DM Sans\",sans-serif;letter-spacing:0.5px;'>"
+            "↑ Wgraj zdjęcie lub użyj kamery, aby rozpocząć analizę</div>",
             None, None
         )
 
     if emotion_model is None:
         return (
-            "<div style='color:#e74c3c;padding:20px;text-align:center;font-size:16px;'>"
-            "❌ Model <b>best_model_base.keras</b> nie został znaleziony w folderze projektu.<br>"
-            "Upewnij się, że plik istnieje i uruchom ponownie.</div>",
+            "<div style='color:#ef4444;padding:20px;text-align:center;font-size:14px;"
+            "font-family:\"DM Sans\",sans-serif;'>"
+            "Brak pliku <code>best_model_base.keras</code> w folderze projektu.</div>",
             None, None
         )
 
@@ -212,49 +221,75 @@ def predict_emotion(image):
     name_pl = EMOTION_PL[pred_emotion]
     desc = EMOTION_DESC[pred_emotion]
 
-    face_info = ""
+    face_status = ""
     if face_bbox is None and FACE_CASCADE is not None:
-        face_info = "<p style='color:#f39c12;font-size:13px;margin-top:8px;'>⚠️ Nie wykryto twarzy — analiza całego obrazu</p>"
+        face_status = (
+            "<div style='display:inline-flex;align-items:center;gap:6px;"
+            "background:#261a00;border:1px solid #78350f;border-radius:6px;"
+            "padding:5px 12px;font-size:12px;color:#fbbf24;margin-top:12px;'>"
+            "⚠ Nie wykryto twarzy — analiza całego obrazu</div>"
+        )
     elif face_bbox is not None:
-        face_info = "<p style='color:#2ecc71;font-size:13px;margin-top:8px;'>✅ Twarz wykryta i wykadrowana</p>"
-
-    html = f"""
-    <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, {color}22, {color}44);
-                    border: 2px solid {color};
-                    border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 16px;">
-            <div style="font-size: 64px; margin-bottom: 8px;">{emoji}</div>
-            <div style="font-size: 28px; font-weight: 800; color: {color}; letter-spacing: 2px;">
-                {name_pl.upper()}
-            </div>
-            <div style="font-size: 20px; color: #ffffff; margin-top: 6px; font-weight: 600;">
-                Pewność: <span style="color:{color}">{confidence:.1f}%</span>
-            </div>
-            {face_info}
-        </div>
-        <div style="background: #1e1e2e; border-radius: 12px; padding: 16px;
-                    border-left: 4px solid {color};">
-            <h4 style="color: {color}; margin: 0 0 8px 0; font-size: 14px; text-transform: uppercase;
-                       letter-spacing: 1px;">📝 Interpretacja</h4>
-            <p style="color: #cccccc; margin: 0; font-size: 14px; line-height: 1.6;">{desc}</p>
-        </div>
-        <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-    """
+        face_status = (
+            "<div style='display:inline-flex;align-items:center;gap:6px;"
+            "background:#0a2318;border:1px solid #166534;border-radius:6px;"
+            "padding:5px 12px;font-size:12px;color:#4ade80;margin-top:12px;'>"
+            "✓ Twarz wykryta i wykadrowana</div>"
+        )
 
     # Mini-tagi dla wszystkich emocji z %
     sorted_emotions = sorted(zip(EMOTION_LABELS, probs), key=lambda x: x[1], reverse=True)
+    tags_html = ""
     for emo, prob in sorted_emotions:
         emo_color = EMOTION_COLORS[emo]
-        opacity = "ff" if emo == pred_emotion else "55"
-        html += f"""
-            <span style="background: {emo_color}{opacity}; color: white;
-                         padding: 4px 10px; border-radius: 20px; font-size: 12px;
-                         font-weight: 600;">
-                {EMOTION_EMOJI[emo]} {EMOTION_PL[emo]} {prob*100:.0f}%
-            </span>
-        """
+        is_top = emo == pred_emotion
+        bg = f"{emo_color}28" if not is_top else f"{emo_color}40"
+        border = f"{emo_color}55" if not is_top else f"{emo_color}cc"
+        weight = "500" if not is_top else "700"
+        tags_html += (
+            f"<span style='background:{bg};border:1px solid {border};"
+            f"color:{emo_color};padding:4px 11px;border-radius:20px;"
+            f"font-size:11.5px;font-weight:{weight};white-space:nowrap;'>"
+            f"{EMOTION_EMOJI[emo]} {EMOTION_PL[emo]} {prob*100:.0f}%</span>"
+        )
 
-    html += "</div></div>"
+    html = f"""
+    <div style="font-family:'DM Sans',system-ui,sans-serif;max-width:580px;margin:0 auto;padding:4px 0;">
+
+      <div style="display:flex;align-items:center;gap:18px;
+                  background:linear-gradient(135deg,{color}18 0%,{color}08 100%);
+                  border:1px solid {color}40;border-radius:14px;
+                  padding:20px 24px;margin-bottom:14px;">
+        <div style="font-size:52px;line-height:1;flex-shrink:0;">{emoji}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:2.5px;
+                      color:{color}99;font-weight:600;margin-bottom:4px;">wykryta emocja</div>
+          <div style="font-size:26px;font-weight:800;color:{color};letter-spacing:1px;
+                      line-height:1.1;">{name_pl}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <div style="flex:1;height:5px;background:{color}20;border-radius:3px;overflow:hidden;">
+              <div style="width:{confidence:.1f}%;height:100%;background:{color};
+                          border-radius:3px;transition:width 0.4s ease;"></div>
+            </div>
+            <span style="font-size:14px;font-weight:700;color:{color};
+                         font-variant-numeric:tabular-nums;">{confidence:.1f}%</span>
+          </div>
+          {face_status}
+        </div>
+      </div>
+
+      <div style="background:#0d0d1f;border:1px solid #1e1e3a;border-radius:10px;
+                  padding:14px 18px;margin-bottom:12px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;
+                    color:#4a4a7a;font-weight:700;margin-bottom:6px;">interpretacja</div>
+        <p style="color:#a0a0c8;margin:0;font-size:13.5px;line-height:1.65;">{desc}</p>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        {tags_html}
+      </div>
+    </div>
+    """
 
     # Wykres
     chart = make_emotion_chart(probs)
@@ -271,52 +306,79 @@ def predict_emotion(image):
 
 def predict_breast_cancer(*args):
     if bc_model is None:
-        return """<div style='color:#e74c3c;padding:20px;font-size:15px;text-align:center;'>
-        ❌ Brak modelu <b>najlepszy_model_breast_cancer.pkl</b>.<br>
-        Uruchom zajecia4_klasyfikacja.py z opcją zapisu modelu.</div>"""
+        return (
+            "<div style='color:#ef4444;padding:40px;font-size:14px;text-align:center;"
+            "font-family:\"DM Sans\",sans-serif;'>"
+            "Brak pliku <code>najlepszy_model_breast_cancer.pkl</code>.<br>"
+            "Uruchom zajecia4_klasyfikacja.py z opcją zapisu modelu.</div>"
+        )
 
     input_df = pd.DataFrame([list(args)], columns=bc_features)
     pred = bc_model.predict(input_df)[0]
     probs = bc_model.predict_proba(input_df)[0]
 
-    result_class = "ZŁOŚLIWY" if pred == 4 else "ŁAGODNY"
-    confidence = probs[1] * 100 if pred == 4 else probs[0] * 100
-    color = "#e74c3c" if pred == 4 else "#2ecc71"
-    icon = "⚠️" if pred == 4 else "✅"
+    is_malignant = (pred == 4)
+    result_class = "ZŁOŚLIWY" if is_malignant else "ŁAGODNY"
+    confidence = probs[1] * 100 if is_malignant else probs[0] * 100
+    color = "#ef4444" if is_malignant else "#22c55e"
+    bg_color = "#1a0505" if is_malignant else "#051a0a"
+    border_color = "#7f1d1d" if is_malignant else "#14532d"
+    icon = "⚠" if is_malignant else "✓"
+    label_color = "#fca5a5" if is_malignant else "#86efac"
+
+    params_html = ""
+    for col, val in zip(bc_features, args):
+        bar_w = int(val * 10)
+        params_html += f"""
+        <div style="display:flex;align-items:center;gap:10px;padding:5px 0;
+                    border-bottom:1px solid #0f0f20;">
+          <div style="width:160px;font-size:12px;color:#6060a0;flex-shrink:0;
+                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            {col.replace('_', ' ')}
+          </div>
+          <div style="flex:1;height:4px;background:#12122a;border-radius:2px;overflow:hidden;">
+            <div style="width:{bar_w}%;height:100%;background:{color}80;border-radius:2px;"></div>
+          </div>
+          <div style="width:28px;text-align:right;font-size:12px;font-weight:700;
+                      color:{color};font-variant-numeric:tabular-nums;">{int(val)}</div>
+        </div>
+        """
 
     html = f"""
-    <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: {color}22; border: 2px solid {color};
-                    border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 16px;">
-            <div style="font-size: 48px;">{icon}</div>
-            <div style="font-size: 26px; font-weight: 800; color: {color}; margin: 8px 0;">
-                {result_class}
-            </div>
-            <div style="color: #ccc; font-size: 17px;">
-                Pewność predykcji: <b style="color:{color}">{confidence:.1f}%</b>
-            </div>
+    <div style="font-family:'DM Sans',system-ui,sans-serif;max-width:560px;margin:0 auto;padding:4px 0;">
+
+      <div style="background:{bg_color};border:1px solid {border_color};
+                  border-radius:14px;padding:24px;text-align:center;margin-bottom:16px;">
+        <div style="width:56px;height:56px;border-radius:50%;
+                    background:{color}20;border:2px solid {color}60;
+                    display:inline-flex;align-items:center;justify-content:center;
+                    font-size:22px;color:{color};margin-bottom:12px;">{icon}</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:3px;
+                    color:{color}80;font-weight:700;margin-bottom:6px;">wynik klasyfikacji</div>
+        <div style="font-size:28px;font-weight:900;color:{color};letter-spacing:2px;
+                    margin-bottom:10px;">{result_class}</div>
+        <div style="display:inline-flex;align-items:center;gap:8px;
+                    background:{color}15;border:1px solid {color}35;
+                    border-radius:8px;padding:6px 16px;">
+          <span style="font-size:12px;color:{label_color};">Pewność predykcji</span>
+          <span style="font-size:16px;font-weight:800;color:{color};
+                       font-variant-numeric:tabular-nums;">{confidence:.1f}%</span>
         </div>
-        <div style="background: #1e1e2e; border-radius: 12px; padding: 16px;
-                    border-left: 4px solid {color};">
-            <h4 style="color:{color}; margin: 0 0 8px 0; font-size:13px; text-transform:uppercase;">
-                📋 Wprowadzone parametry
-            </h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-    """
-    for col, val in zip(bc_features, args):
-        html += f"""
-            <div style="color:#aaa; font-size:13px;">
-                {col.replace('_', ' ')}: <b style="color:white">{val}/10</b>
-            </div>
-        """
-    html += """
-            </div>
-        </div>
-        <div style="margin-top:12px; padding:12px; background:#111827; border-radius:8px;">
-            <p style="color:#888; font-size:12px; margin:0; text-align:center;">
-                ⚕️ System demonstracyjny — nie zastępuje profesjonalnej diagnozy medycznej.
-            </p>
-        </div>
+      </div>
+
+      <div style="background:#07070f;border:1px solid #141428;border-radius:10px;
+                  padding:14px 18px;margin-bottom:12px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;
+                    color:#4a4a7a;font-weight:700;margin-bottom:10px;">parametry wejściowe</div>
+        {params_html}
+      </div>
+
+      <div style="padding:10px 14px;background:#07070f;border-radius:8px;
+                  border-left:3px solid #2a2a5a;">
+        <p style="color:#4a4a6a;font-size:11.5px;margin:0;line-height:1.5;">
+          System demonstracyjny — nie zastępuje profesjonalnej diagnozy medycznej.
+        </p>
+      </div>
     </div>
     """
     return html
@@ -327,107 +389,427 @@ def predict_breast_cancer(*args):
 # ══════════════════════════════════════════════════════════════
 
 CUSTOM_CSS = """
-/* Tło główne */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
 .gradio-container {
-    background: #0d0d1a !important;
-    font-family: 'Segoe UI', sans-serif !important;
+    background: #05050f !important;
+    font-family: 'DM Sans', system-ui, sans-serif !important;
+    min-height: 100vh;
 }
-/* Nagłówek */
-.main-header {
-    background: linear-gradient(135deg, #0f0f23, #1a1a3e);
-    border-bottom: 1px solid #2a2a5a;
-    padding: 28px 40px 20px;
-    text-align: center;
+
+/* ── Tabs ── */
+.tab-nav {
+    background: transparent !important;
+    border-bottom: 1px solid #1a1a2e !important;
+    padding: 0 8px !important;
+    gap: 4px !important;
 }
-/* Karty tabów */
+
 .tab-nav button {
-    background: #1a1a2e !important;
-    color: #8888aa !important;
-    border: 1px solid #2a2a4a !important;
-    font-size: 15px !important;
+    background: transparent !important;
+    color: #4a4a7a !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 14px !important;
     font-weight: 600 !important;
-    padding: 10px 24px !important;
+    padding: 12px 20px !important;
+    letter-spacing: 0.3px !important;
+    transition: all 0.2s ease !important;
 }
+
+.tab-nav button:hover {
+    color: #8080cc !important;
+    background: #0d0d22 !important;
+}
+
 .tab-nav button.selected {
-    background: #2a2a5e !important;
-    color: #ffffff !important;
-    border-color: #5555aa !important;
+    color: #a5b4fc !important;
+    border-bottom: 2px solid #6366f1 !important;
+    background: transparent !important;
 }
-/* Inputy */
-.gr-box, .gr-form, .gr-panel {
-    background: #111827 !important;
-    border: 1px solid #1f2937 !important;
+
+/* ── Panels & forms ── */
+.gr-panel, .gr-box, .gr-form {
+    background: #0a0a18 !important;
+    border: 1px solid #14142a !important;
+    border-radius: 10px !important;
 }
+
+/* ── Labels ── */
+label span {
+    color: #7070aa !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1.5px !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+
+/* ── Buttons ── */
+.gr-button, button.primary, .btn-primary {
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+button.primary, .gr-button-primary {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+    border: none !important;
+    color: white !important;
+    box-shadow: 0 0 20px #4f46e520 !important;
+}
+
+button.primary:hover, .gr-button-primary:hover {
+    background: linear-gradient(135deg, #5a51f0, #8b47f7) !important;
+    box-shadow: 0 0 30px #4f46e540 !important;
+    transform: translateY(-1px) !important;
+}
+
+button.primary:active, .gr-button-primary:active {
+    transform: translateY(0px) !important;
+    box-shadow: 0 0 15px #4f46e530 !important;
+}
+
+/* ── Inputs ── */
+input[type=number], input[type=text], textarea, select {
+    background: #08080f !important;
+    border: 1px solid #1e1e36 !important;
+    color: #c0c0e0 !important;
+    border-radius: 7px !important;
+    font-family: 'DM Mono', monospace !important;
+    font-size: 13px !important;
+}
+
+input[type=number]:focus, input[type=text]:focus, textarea:focus {
+    border-color: #4f46e5 !important;
+    box-shadow: 0 0 0 2px #4f46e520 !important;
+    outline: none !important;
+}
+
+/* ── Sliders ── */
+input[type=range] {
+    accent-color: #6366f1 !important;
+}
+
+.gr-slider-container .range-slider {
+    accent-color: #6366f1 !important;
+}
+
+/* ── Image upload ── */
+.gr-image-preview, .image-preview {
+    background: #07070f !important;
+    border: 1px dashed #2a2a4a !important;
+    border-radius: 10px !important;
+}
+
+/* ── File upload zone ── */
+.upload-box, .gr-file-upload {
+    background: #07070f !important;
+    border: 1.5px dashed #2a2a4a !important;
+    border-radius: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+.upload-box:hover {
+    border-color: #4f46e5 !important;
+    background: #0a0a18 !important;
+}
+
+/* ── Row & column spacing ── */
+.gap-4, .gr-row {
+    gap: 16px !important;
+}
+
+/* ── Output HTML containers ── */
+.gr-html-output, .output-html {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* ── Accordion / details ── */
+details {
+    transition: all 0.2s ease;
+}
+
+details summary:hover {
+    color: #8888cc !important;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #05050f; }
+::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #4a4a7a; }
+
+/* ── Sub-tab (upload/camera) inner tabs ── */
+.tab-nav.svelte-1uw5tnk button, .inner-tab-nav button {
+    font-size: 12px !important;
+    padding: 8px 14px !important;
+}
+"""
+
+HEADER_HTML = """
+<div style="
+    font-family:'DM Sans',system-ui,sans-serif;
+    padding: 40px 48px 28px;
+    position: relative;
+    overflow: hidden;
+">
+    <!-- Decorative grid -->
+    <div style="
+        position:absolute;top:0;left:0;right:0;bottom:0;
+        background-image:
+            linear-gradient(#1a1a3a22 1px, transparent 1px),
+            linear-gradient(90deg, #1a1a3a22 1px, transparent 1px);
+        background-size: 40px 40px;
+        pointer-events:none;
+    "></div>
+
+    <!-- Decorative orbs -->
+    <div style="
+        position:absolute;top:-60px;right:80px;
+        width:200px;height:200px;border-radius:50%;
+        background:radial-gradient(circle, #4f46e530 0%, transparent 70%);
+        pointer-events:none;
+    "></div>
+    <div style="
+        position:absolute;bottom:-40px;left:40px;
+        width:150px;height:150px;border-radius:50%;
+        background:radial-gradient(circle, #7c3aed20 0%, transparent 70%);
+        pointer-events:none;
+    "></div>
+
+    <!-- Content -->
+    <div style="position:relative;z-index:1;">
+        <div style="
+            display:inline-flex;align-items:center;gap:8px;
+            background:#0d0d22;border:1px solid #2a2a4a;
+            border-radius:20px;padding:4px 14px;
+            font-size:11px;font-weight:700;letter-spacing:2.5px;
+            color:#6366f1;text-transform:uppercase;
+            margin-bottom:16px;
+        ">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6366f1;"></span>
+            Uczenie Maszynowe II &nbsp;·&nbsp; Projekt 5
+        </div>
+
+        <h1 style="
+            font-size:38px;font-weight:900;margin:0 0 8px 0;
+            color:#f0f0ff;letter-spacing:-0.5px;line-height:1.1;
+        ">
+            Akademia Tarnowska
+            <span style="
+                display:inline-block;
+                background:linear-gradient(135deg,#6366f1,#a78bfa);
+                -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+                background-clip:text;
+            "> ML Demo</span>
+        </h1>
+
+        <p style="
+            font-size:14px;color:#5050a0;margin:0;
+            font-weight:500;letter-spacing:0.5px;
+        ">
+            Interfejs demonstracyjny systemów rozpoznawania emocji i diagnostyki medycznej
+        </p>
+
+        <!-- Status chips -->
+        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+            <div style="
+                display:inline-flex;align-items:center;gap:7px;
+                background:#07120d;border:1px solid #14532d;
+                border-radius:8px;padding:6px 14px;
+            ">
+                <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;
+                             box-shadow:0 0 6px #22c55e80;"></span>
+                <span style="font-size:12px;font-weight:600;color:#4ade80;">CNN FER-2013</span>
+                <span style="font-size:11px;color:#166534;">35 887 obrazów · 7 klas</span>
+            </div>
+            <div style="
+                display:inline-flex;align-items:center;gap:7px;
+                background:#07120d;border:1px solid #14532d;
+                border-radius:8px;padding:6px 14px;
+            ">
+                <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;
+                             box-shadow:0 0 6px #22c55e80;"></span>
+                <span style="font-size:12px;font-weight:600;color:#4ade80;">Breast Cancer Wisconsin</span>
+                <span style="font-size:11px;color:#166534;">klasyczny ML</span>
+            </div>
+        </div>
+    </div>
+</div>
+"""
+
+EMOTION_TAB_INFO = """
+<div style="
+    font-family:'DM Sans',system-ui,sans-serif;
+    display:flex;align-items:flex-start;gap:12px;
+    background:#080814;border:1px solid #141428;border-radius:10px;
+    padding:14px 18px;margin-bottom:4px;
+">
+    <div style="
+        width:32px;height:32px;border-radius:8px;
+        background:#1e1b4b;border:1px solid #312e81;
+        display:flex;align-items:center;justify-content:center;
+        font-size:16px;flex-shrink:0;
+    ">🧠</div>
+    <div>
+        <div style="font-size:12px;font-weight:700;color:#818cf8;
+                    text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">
+            Model CNN — FER-2013
+        </div>
+        <div style="font-size:13px;color:#5050a0;line-height:1.6;">
+            Architektura: 3× [Conv2D → BatchNorm → MaxPool → Dropout] → Dense(256) → Softmax.
+            Preprocessing: grayscale 48×48, normalizacja /255, augmentacja rotacja/flip/zoom.
+        </div>
+    </div>
+</div>
+"""
+
+BC_TAB_INFO = """
+<div style="
+    font-family:'DM Sans',system-ui,sans-serif;
+    display:flex;align-items:flex-start;gap:12px;
+    background:#080814;border:1px solid #141428;border-radius:10px;
+    padding:14px 18px;margin-bottom:4px;
+">
+    <div style="
+        width:32px;height:32px;border-radius:8px;
+        background:#052e16;border:1px solid #14532d;
+        display:flex;align-items:center;justify-content:center;
+        font-size:16px;flex-shrink:0;
+    ">🔬</div>
+    <div>
+        <div style="font-size:12px;font-weight:700;color:#4ade80;
+                    text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">
+            Model ML — Breast Cancer Wisconsin
+        </div>
+        <div style="font-size:13px;color:#5050a0;line-height:1.6;">
+            Klasyfikacja guza na podstawie parametrów histopatologicznych w skali 1–10.
+            Ustaw wartości suwaków i kliknij przycisk klasyfikacji.
+        </div>
+    </div>
+</div>
+"""
+
+FOOTER_HTML = """
+<div style="
+    font-family:'DM Sans',system-ui,sans-serif;
+    text-align:center;padding:20px;
+    border-top:1px solid #0f0f22;margin-top:8px;
+    display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;
+">
+    <span style="color:#2a2a4a;font-size:11px;font-weight:600;letter-spacing:1px;">
+        AKADEMIA TARNOWSKA
+    </span>
+    <span style="color:#1a1a3a;font-size:11px;">·</span>
+    <span style="color:#2a2a4a;font-size:11px;">Uczenie Maszynowe II</span>
+    <span style="color:#1a1a3a;font-size:11px;">·</span>
+    <span style="color:#2a2a4a;font-size:11px;">Projekt 5</span>
+    <span style="color:#1a1a3a;font-size:11px;">·</span>
+    <span style="color:#2a2a4a;font-size:11px;">CNN + Classical ML</span>
+</div>
+"""
+
+DETAILS_HTML = """
+<details style="margin-top:14px;border:1px solid #141428;border-radius:10px;overflow:hidden;">
+    <summary style="
+        font-family:'DM Sans',sans-serif;
+        color:#5050a0;cursor:pointer;font-size:12px;font-weight:700;
+        text-transform:uppercase;letter-spacing:1.5px;
+        padding:12px 16px;background:#07070f;
+        list-style:none;display:flex;align-items:center;gap:8px;
+        border-bottom:1px solid transparent;
+        transition: all 0.2s ease;
+    ">
+        <span style="font-size:14px;">⚙</span>
+        Szczegóły modelu i architektury CNN
+    </summary>
+    <div style="
+        background:#07070f;padding:16px 20px;
+        font-family:'DM Mono',monospace;font-size:12px;
+        color:#5050a0;line-height:2;
+    ">
+        <div><span style="color:#3a3a7a;text-transform:uppercase;font-size:10px;
+                          letter-spacing:1.5px;font-weight:700;">Zbiór danych</span><br>
+             <span style="color:#8080c0;">FER-2013 — 28 709 treningowych / 7 178 testowych</span></div>
+        <div style="margin-top:10px;"><span style="color:#3a3a7a;text-transform:uppercase;font-size:10px;
+                          letter-spacing:1.5px;font-weight:700;">Klasy</span><br>
+             <span style="color:#8080c0;">angry · disgust · fear · happy · neutral · sad · surprise</span></div>
+        <div style="margin-top:10px;"><span style="color:#3a3a7a;text-transform:uppercase;font-size:10px;
+                          letter-spacing:1.5px;font-weight:700;">Architektura</span><br>
+             <span style="color:#8080c0;">3× [Conv2D → BN → Conv2D → BN → MaxPool → Dropout]<br>
+             → Dense(256) → BN → Dropout → Softmax</span></div>
+        <div style="margin-top:10px;"><span style="color:#3a3a7a;text-transform:uppercase;font-size:10px;
+                          letter-spacing:1.5px;font-weight:700;">Optymalizacja</span><br>
+             <span style="color:#8080c0;">Adam lr=0.001 · ReduceLROnPlateau · EarlyStopping</span></div>
+    </div>
+</details>
 """
 
 with gr.Blocks(
     css=CUSTOM_CSS,
-    title="ML Demo — Emocje & Diagnostyka",
+    title="AT · ML Demo",
     theme=gr.themes.Base(
         primary_hue="violet",
         secondary_hue="indigo",
         neutral_hue="slate",
-        font=[gr.themes.GoogleFont("Syne"), "ui-sans-serif"],
+        font=[gr.themes.GoogleFont("DM Sans"), "ui-sans-serif"],
     )
 ) as demo:
 
-    gr.HTML("""
-    <div style="text-align:center; padding: 32px 20px 16px; background: linear-gradient(135deg,#0d0d1a,#1a1a3e);">
-        <h1 style="font-size:32px; font-weight:900; color:white; letter-spacing:3px; margin:0;">
-            🧠 AKADEMIA TARNOWSKA
-        </h1>
-        <p style="color:#7777cc; font-size:14px; letter-spacing:4px; margin:8px 0 0 0; font-weight:600;">
-            UCZENIE MASZYNOWE II — PROJEKT 5 — INTERFEJS DEMONSTRACYJNY
-        </p>
-        <div style="width:60px; height:3px; background:linear-gradient(90deg,#6366f1,#8b5cf6);
-                    margin:16px auto 0; border-radius:2px;"></div>
-    </div>
-    """)
+    gr.HTML(HEADER_HTML)
 
     with gr.Tabs():
 
         # ── TAB 1: EMOCJE ──────────────────────────────────────────
-        with gr.Tab("😊 Rozpoznawanie Emocji (CNN)"):
-            gr.HTML("""
-            <div style="padding:16px 0 8px; color:#8888bb; font-size:13px; line-height:1.6;">
-                Model CNN wytrenowany na zbiorze <b style="color:#a0a0ff">FER-2013</b>
-                (35 887 obrazów 48×48, 7 klas emocji). Architektura: 3× bloki Conv2D+BN+MaxPool+Dropout,
-                warstwa Dense(256), softmax. Wgraj zdjęcie twarzy lub użyj kamery.
-            </div>
-            """)
+        with gr.Tab("😊  Rozpoznawanie emocji"):
+            gr.HTML(EMOTION_TAB_INFO)
 
             with gr.Row():
                 with gr.Column(scale=1):
-                    with gr.Tab("📁 Upload zdjęcia"):
+                    with gr.Tab("📁 Upload"):
                         img_upload = gr.Image(
                             label="Wgraj zdjęcie",
                             type="pil",
                             sources=["upload"],
-                            height=300,
+                            height=280,
                         )
-                        btn_upload = gr.Button("🔍 Analizuj emocję", variant="primary", size="lg")
+                        btn_upload = gr.Button("Analizuj emocję →", variant="primary", size="lg")
 
-                    with gr.Tab("📷 Kamera na żywo"):
+                    with gr.Tab("📷 Kamera"):
                         img_camera = gr.Image(
-                            label="Zrób zdjęcie kamerą",
+                            label="Zrób zdjęcie",
                             type="pil",
                             sources=["webcam"],
-                            height=300,
+                            height=280,
                             streaming=False,
                         )
-                        btn_camera = gr.Button("🔍 Analizuj emocję", variant="primary", size="lg")
+                        btn_camera = gr.Button("Analizuj emocję →", variant="primary", size="lg")
 
                 with gr.Column(scale=1):
                     emotion_html = gr.HTML(
-                        value="<div style='color:#555;padding:40px;text-align:center;font-size:14px;'>"
-                              "← Wgraj lub zrób zdjęcie, aby zobaczyć wynik</div>"
+                        value=(
+                            "<div style='font-family:\"DM Sans\",sans-serif;"
+                            "color:#2a2a4a;padding:48px;text-align:center;"
+                            "font-size:13px;letter-spacing:0.5px;'>"
+                            "← Wgraj lub zrób zdjęcie, aby zobaczyć wynik</div>"
+                        )
                     )
 
             with gr.Row():
                 with gr.Column(scale=1):
-                    annotated_img = gr.Image(label="Obraz z detekcją twarzy", height=220)
+                    annotated_img = gr.Image(label="Detekcja twarzy", height=210)
                 with gr.Column(scale=2):
-                    emotion_chart = gr.Image(label="Rozkład prawdopodobieństw", height=220)
+                    emotion_chart = gr.Image(label="Rozkład prawdopodobieństw", height=210)
 
             btn_upload.click(
                 fn=predict_emotion,
@@ -440,32 +822,11 @@ with gr.Blocks(
                 outputs=[emotion_html, emotion_chart, annotated_img]
             )
 
-            gr.HTML("""
-            <details style="margin-top:16px; padding:12px; background:#111827;
-                            border-radius:8px; border:1px solid #1f2937;">
-                <summary style="color:#7777cc; cursor:pointer; font-size:13px; font-weight:600;">
-                    ℹ️ Szczegóły modelu i architektury CNN
-                </summary>
-                <div style="color:#888; font-size:12px; margin-top:10px; line-height:1.8;">
-                    <b style="color:#aaa">Zbiór danych:</b> FER-2013 — 28 709 treningowych / 7 178 testowych<br>
-                    <b style="color:#aaa">Klasy:</b> angry, disgust, fear, happy, neutral, sad, surprise<br>
-                    <b style="color:#aaa">Preprocessing:</b> grayscale 48×48, normalizacja /255<br>
-                    <b style="color:#aaa">Augmentacja:</b> rotacja ±15°, flip, zoom 10%, brightness 0.8–1.2<br>
-                    <b style="color:#aaa">Architektura:</b> 3× [Conv2D → BN → Conv2D → BN → MaxPool → Dropout] → Dense(256) → BN → Dropout → softmax<br>
-                    <b style="color:#aaa">Optymalizator:</b> Adam(lr=0.001) z ReduceLROnPlateau i EarlyStopping
-                </div>
-            </details>
-            """)
+            gr.HTML(DETAILS_HTML)
 
         # ── TAB 2: BREAST CANCER ───────────────────────────────────
-        with gr.Tab("🔬 Diagnostyka Nowotworów (ML)"):
-            gr.HTML("""
-            <div style="padding:16px 0 8px; color:#8888bb; font-size:13px; line-height:1.6;">
-                Model klasyczny ML wytrenowany na zbiorze
-                <b style="color:#a0a0ff">Breast Cancer Wisconsin</b>.
-                Ustaw wartości parametrów histopatologicznych (skala 1–10).
-            </div>
-            """)
+        with gr.Tab("🔬  Diagnostyka nowotworów"):
+            gr.HTML(BC_TAB_INFO)
 
             if bc_model is not None and bc_features is not None:
                 with gr.Row():
@@ -478,12 +839,16 @@ with gr.Blocks(
                                 value=5
                             )
                             bc_inputs.append(slider)
-                        btn_bc = gr.Button("🔬 Klasyfikuj guz", variant="primary", size="lg")
+                        btn_bc = gr.Button("Klasyfikuj guz →", variant="primary", size="lg")
 
                     with gr.Column(scale=1):
                         bc_html = gr.HTML(
-                            value="<div style='color:#555;padding:40px;text-align:center;font-size:14px;'>"
-                                  "← Ustaw parametry i kliknij przycisk</div>"
+                            value=(
+                                "<div style='font-family:\"DM Sans\",sans-serif;"
+                                "color:#2a2a4a;padding:48px;text-align:center;"
+                                "font-size:13px;letter-spacing:0.5px;'>"
+                                "← Ustaw parametry i kliknij przycisk klasyfikacji</div>"
+                            )
                         )
 
                 btn_bc.click(
@@ -493,26 +858,24 @@ with gr.Blocks(
                 )
             else:
                 gr.HTML("""
-                <div style="background:#1a0f0f; border:1px solid #5a2222; border-radius:12px;
-                            padding:24px; text-align:center; color:#cc8888;">
-                    <h3>❌ Model Breast Cancer niedostępny</h3>
-                    <p style="font-size:13px; color:#888;">
-                        Uruchom <b>zajecia4_klasyfikacja.py</b> z opcją zapisu modelu:<br><br>
-                        <code style="background:#111; padding:4px 12px; border-radius:4px;">
-                        joblib.dump({'model': best_cv_pipe, 'features': list(X.columns)},
-                        'najlepszy_model_breast_cancer.pkl')
-                        </code>
-                    </p>
+                <div style="
+                    font-family:'DM Sans',sans-serif;
+                    background:#0a0505;border:1px solid #7f1d1d;border-radius:12px;
+                    padding:28px;text-align:center;
+                ">
+                    <div style="font-size:28px;margin-bottom:12px;">⚠</div>
+                    <div style="font-size:16px;font-weight:700;color:#fca5a5;margin-bottom:8px;">
+                        Model Breast Cancer niedostępny
+                    </div>
+                    <div style="font-size:13px;color:#4a1515;line-height:1.7;">
+                        Uruchom <code style="background:#1a0505;padding:2px 8px;border-radius:4px;
+                        color:#f87171;">zajecia4_klasyfikacja.py</code> z opcją zapisu modelu, a następnie
+                        uruchom ponownie aplikację.
+                    </div>
                 </div>
                 """)
 
-    gr.HTML("""
-    <div style="text-align:center; padding:16px; color:#444466; font-size:11px;
-                border-top:1px solid #1a1a3a; margin-top:24px;">
-        Akademia Tarnowska · Uczenie Maszynowe II · Projekt 5 ·
-        CNN (FER-2013) + Classical ML (Breast Cancer Wisconsin)
-    </div>
-    """)
+    gr.HTML(FOOTER_HTML)
 
 
 if __name__ == "__main__":

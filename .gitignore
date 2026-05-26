@@ -1,0 +1,23 @@
+# Środowisko wirtualne (absolutnie nie wrzucamy na GitHub!)
+.venv/
+venv/
+ENV/
+
+# Pamięć podręczna Pythona i IDE
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+
+# Ciężkie pliki danych (kolega pobierze je skryptem)
+data/
+ml-latest-small/
+keras_tuner_dir/
+
+# Duże pliki modeli i binarne pliki wag
+*.keras
+*.pkl
+*.h5
+
+# Opcjonalnie: Pliki graficzne (jeśli wolisz, by kolega wygenerował je sam)
+# *.png

@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -144,8 +146,7 @@ aug_gen = ImageDataGenerator(
     width_shift_range=0.1,
     height_shift_range=0.1,
     horizontal_flip=True,
-    zoom_range=0.1,
-    brightness_range=[0.8, 1.2]
+    zoom_range=0.1
 )
 
 fig, axes = plt.subplots(2, 5, figsize=(12, 5))

@@ -1,27 +1,81 @@
+import matplotlib
+matplotlib.use('Agg')  # Zapis do pliku zamiast okna GUI
+
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import (Conv2D, MaxPooling2D, Dense, Dropout,
-                                     BatchNormalization, Flatten, GlobalAveragePooling2D)
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
-from tensorflow.keras.regularizers import l2
+from sklearn.model_selection import train_test_split
 
-# ============================================================
-# 1. PARAMETRY
-# ============================================================
 DATA_DIR = "data"
 IMG_SIZE = (48, 48)
 BATCH_SIZE = 32
-EPOCHS = 30
 RANDOM_STATE = 42
-NUM_CLASSES = 7
 
-# ============================================================
-# 2. DATA PIPELINE Z AUGMENTACJĄ
-# ============================================================
+print("=== Analiza struktury danych FER-2013 ===\n")
+splits = ["train", "test"]
+class_counts = {}
+
+for split in splits:
+    split_path = os.path.join(DATA_DIR, split)
+    if not os.path.exists(split_path):
+        print(f"Brak folderu: {split_path}")
+        continue
+    print(f"--- {split.upper()} ---")
+    class_counts[split] = {}
+    for emotion in sorted(os.listdir(split_path)):
+        emotion_path = os.path.join(split_path, emotion)
+        if os.path.isdir(emotion_path):
+            count = len(os.listdir(emotion_path))
+            class_counts[split][emotion] = count
+            print(f"  {emotion}: {count} obrazów")
+    print()
+
+# Wykres rozkładu klas
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+for idx, split in enumerate(splits):
+    if split in class_counts:
+        emotions = list(class_counts[split].keys())
+        counts   = list(class_counts[split].values())
+        axes[idx].bar(emotions, counts, color='skyblue', edgecolor='black')
+        axes[idx].set_title(f"Rozkład klas - {split.upper()}")
+        axes[idx].set_xlabel("Emocja")
+        axes[idx].set_ylabel("Liczba obrazów")
+        axes[idx].tick_params(axis='x', rotation=45)
+plt.suptitle("Analiza niezbalansowania klas FER-2013")
+plt.tight_layout()
+plt.savefig('wykres_rozklad_klas.png', dpi=100, bbox_inches='tight')
+plt.close()
+print("Zapisano: wykres_rozklad_klas.png")
+
+# Podgląd przykładowych obrazów
+from PIL import Image
+train_path = os.path.join(DATA_DIR, "train")
+emotions_list = sorted([e for e in os.listdir(train_path)
+                        if os.path.isdir(os.path.join(train_path, e))])
+
+fig, axes = plt.subplots(2, len(emotions_list), figsize=(16, 6))
+for idx, emotion in enumerate(emotions_list):
+    emotion_path = os.path.join(train_path, emotion)
+    images = os.listdir(emotion_path)
+    if len(images) >= 2:
+        img  = Image.open(os.path.join(emotion_path, images[0]))
+        img2 = Image.open(os.path.join(emotion_path, images[1]))
+        axes[0][idx].imshow(img, cmap='gray')
+        axes[0][idx].set_title(emotion, fontsize=8)
+        axes[0][idx].axis('off')
+        axes[1][idx].imshow(img2, cmap='gray')
+        axes[1][idx].axis('off')
+plt.suptitle("Przykładowe obrazy per klasa emocji")
+plt.tight_layout()
+plt.savefig('wykres_przykladowe_obrazy.png', dpi=100, bbox_inches='tight')
+plt.close()
+print("Zapisano: wykres_przykladowe_obrazy.png")
+
+# Data Pipeline z augmentacją
+print("=== Konfiguracja Data Pipeline z augmentacją ===\n")
 train_datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=15,
@@ -31,147 +85,55 @@ train_datagen = ImageDataGenerator(
     zoom_range=0.1,
     brightness_range=[0.8, 1.2]
 )
-
 val_test_datagen = ImageDataGenerator(rescale=1./255)
 
 train_generator = train_datagen.flow_from_directory(
     os.path.join(DATA_DIR, "train"),
-    target_size=IMG_SIZE,
-    color_mode='grayscale',
-    batch_size=BATCH_SIZE,
-    class_mode='categorical',
-    shuffle=True,
-    seed=RANDOM_STATE
+    target_size=IMG_SIZE, color_mode='grayscale',
+    batch_size=BATCH_SIZE, class_mode='categorical',
+    shuffle=True, seed=RANDOM_STATE
 )
-
 test_generator = val_test_datagen.flow_from_directory(
     os.path.join(DATA_DIR, "test"),
-    target_size=IMG_SIZE,
-    color_mode='grayscale',
-    batch_size=BATCH_SIZE,
-    class_mode='categorical',
+    target_size=IMG_SIZE, color_mode='grayscale',
+    batch_size=BATCH_SIZE, class_mode='categorical',
     shuffle=False
 )
 
-# ============================================================
-# 3. ARCHITEKTURA CNN.
-# ============================================================
-model = Sequential([
-    # Blok 1
-    Conv2D(32, (3,3), padding='same', activation='relu',
-           input_shape=(48, 48, 1)),
-    BatchNormalization(),
-    Conv2D(32, (3,3), padding='same', activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
-    Dropout(0.25),
+print(f"\nKlasy: {train_generator.class_indices}")
+print(f"Liczba próbek treningowych: {train_generator.samples}")
+print(f"Liczba próbek testowych: {test_generator.samples}")
 
-    # Blok 2
-    Conv2D(64, (3,3), padding='same', activation='relu'),
-    BatchNormalization(),
-    Conv2D(64, (3,3), padding='same', activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
-    Dropout(0.25),
+# Wizualizacja augmentacji
+print("\n=== Wizualizacja efektu augmentacji ===")
+sample_emotion   = emotions_list[0]
+sample_img_path  = os.path.join(train_path, sample_emotion,
+                                os.listdir(os.path.join(train_path, sample_emotion))[0])
+sample_img = np.array(Image.open(sample_img_path).convert('L'))
+sample_img = sample_img.reshape(1, 48, 48, 1).astype('float32') / 255.0
 
-    # Blok 3
-    Conv2D(128, (3,3), padding='same', activation='relu'),
-    BatchNormalization(),
-    Conv2D(128, (3,3), padding='same', activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D(2, 2),
-    Dropout(0.4),
-
-    # Klasyfikator
-    Flatten(),
-    Dense(256, activation='relu'),
-    BatchNormalization(),
-    Dropout(0.5),
-    Dense(NUM_CLASSES, activation='softmax')
-])
-
-model.summary()
-
-# ============================================================
-# 4. KONFIGURACJA OPTYMALIZACJI.
-# ============================================================
-optimizer = Adam(learning_rate=0.001)
-
-model.compile(
-    optimizer=optimizer,
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
+aug_gen = ImageDataGenerator(
+    rotation_range=15, width_shift_range=0.1,
+    height_shift_range=0.1, horizontal_flip=True,
+    zoom_range=0.1, brightness_range=[0.8, 1.2]
 )
 
-# ============================================================
-# 5. CALLBACKS (Early Stopping, LR Scheduler, Checkpoint)
-# ============================================================
-callbacks = [
-    EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        restore_best_weights=True,
-        verbose=1
-    ),
-    ReduceLROnPlateau(
-        monitor='val_loss',
-        factor=0.5,
-        patience=5,
-        min_lr=1e-6,
-        verbose=1
-    ),
-    ModelCheckpoint(
-        filepath='best_model.keras',
-        monitor='val_accuracy',
-        save_best_only=True,
-        verbose=1
-    )
-]
-
-# ============================================================
-# 6. TRENOWANIE
-# ============================================================
-print("\n=== Rozpoczynam trenowanie CNN ===\n")
-
-history = model.fit(
-    train_generator,
-    epochs=EPOCHS,
-    validation_data=test_generator,
-    callbacks=callbacks,
-    verbose=1
-)
-
-# ============================================================
-# 7. WIZUALIZACJA KRZYWYCH UCZENIA
-# ============================================================
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-ax1.plot(history.history['accuracy'], label='Train Accuracy')
-ax1.plot(history.history['val_accuracy'], label='Val Accuracy')
-ax1.set_title('Krzywe dokładności')
-ax1.set_xlabel('Epoka')
-ax1.set_ylabel('Accuracy')
-ax1.legend()
-ax1.grid(alpha=0.3)
-
-ax2.plot(history.history['loss'], label='Train Loss')
-ax2.plot(history.history['val_loss'], label='Val Loss')
-ax2.set_title('Krzywe straty')
-ax2.set_xlabel('Epoka')
-ax2.set_ylabel('Loss')
-ax2.legend()
-ax2.grid(alpha=0.3)
-
-plt.suptitle("Monitorowanie trenowania CNN - FER-2013")
+fig, axes = plt.subplots(2, 5, figsize=(12, 5))
+axes[0][0].imshow(sample_img[0, :, :, 0], cmap='gray')
+axes[0][0].set_title("Oryginał"); axes[0][0].axis('off')
+aug_iter = aug_gen.flow(sample_img, batch_size=1)
+for i in range(1, 10):
+    aug_img = next(aug_iter)[0, :, :, 0]
+    row, col = divmod(i, 5)
+    axes[row][col].imshow(aug_img, cmap='gray')
+    axes[row][col].set_title(f"Aug #{i}"); axes[row][col].axis('off')
+plt.suptitle(f"Efekt augmentacji - emocja: {sample_emotion}")
 plt.tight_layout()
-plt.show()
+plt.savefig('wykres_augmentacja.png', dpi=100, bbox_inches='tight')
+plt.close()
+print("Zapisano: wykres_augmentacja.png")
 
-# ============================================================
-# 8. EWALUACJA KOŃCOWA
-# ============================================================
-print("\n=== Ewaluacja końcowa na zbiorze testowym ===")
-test_loss, test_acc = model.evaluate(test_generator, verbose=1)
-print(f"\nTest Accuracy: {test_acc:.4f}")
-print(f"Test Loss: {test_loss:.4f}")
-
-print("\n=== Zajęcia 2 - Deep Learning zakończone! ===")
+print("\n=== Zajęcia 2 zakończone! ===")
+print(f"Train samples: {train_generator.samples}")
+print(f"Test samples:  {test_generator.samples}")
+print(f"Klasy: {list(train_generator.class_indices.keys())}")
